@@ -24,9 +24,6 @@
     "symfony/filesystem": "^5.4",
     "symfony/process": "^5.4"
   },
-  "require-dev": {
-    "humbug/box": "^3.16"
-  },
   "autoload": {
     "psr-4": {
       "Machinateur\\ChromeTabTransfer\\": "src/"

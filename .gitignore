@@ -3,6 +3,7 @@
 /vendor/
 
 box.json
+box.phar
 
 tab-transfer.phar
 
