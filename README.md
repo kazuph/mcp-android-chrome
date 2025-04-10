@@ -154,7 +154,7 @@ Here's a good explanation for Windows, of how to set up a new path in there:
 > https://stackoverflow.com/questions/20564514/adb-is-not-recognized-as-an-internal-or-external-command-operable-program-or/65880336#65880336
 
 ```bash
-git clone git@github.com:machinateur/tab-transfer.git
+git clone https://github.com/machinateur/tab-transfer.git
 cd tab-transfer
 tab-transfer.cmd
 ```
@@ -164,7 +164,7 @@ This approach requires composer!
 #### On Mac/Linux:
 
 ```bash
-git clone git@github.com:machinateur/tab-transfer.git
+git clone https://github.com/machinateur/tab-transfer.git
 cd tab-transfer
 chmod +x ./tab-transfer.sh
 ./tab-transfer.sh
