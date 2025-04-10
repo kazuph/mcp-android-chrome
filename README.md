@@ -465,7 +465,7 @@ It's possible to gain some more insight using the device inspection built into a
 ### Incomplete tab list
 
 Even though it is rare, there have been cases where the tab list was missing a small number of tabs.
-^
+
 In most cases the list was complete when re-tried.
 
 It was also reported in [#29](https://github.com/machinateur/tab-transfer/issues/29) that setting
