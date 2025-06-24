@@ -2,11 +2,23 @@
 
 A Model Context Protocol (MCP) server for transferring Chrome tabs between mobile devices and computers using developer tools.
 
+[![Release](https://img.shields.io/github/v/release/kazuph/mcp-android-chrome)](https://github.com/kazuph/mcp-android-chrome/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go](https://img.shields.io/badge/go-%2300ADD8.svg?style=flat&logo=go&logoColor=white)](https://golang.org/)
+
 ## Overview
 
-This is a Go port of the original [tab-transfer](https://github.com/machinateur/tab-transfer) tool by **machinateur**, reimplemented as an MCP server to integrate with AI assistants like Claude.
+This is a Go port of the original [tab-transfer](https://github.com/machinateur/tab-transfer) tool by **machinateur**, reimplemented as an MCP server to integrate with AI assistants like Claude Desktop.
 
 **Original tool by machinateur, Go port by kazuph.**
+
+## What's New in v0.9.0
+
+- ✅ **Full MCP Server Implementation**: Complete integration with Claude Desktop
+- ✅ **Environment Variable Configuration**: Clean `ADB_PATH` and `IOS_WEBKIT_DEBUG_PROXY_PATH` support
+- ✅ **Improved Error Handling**: Better diagnostics and path detection
+- ✅ **No stdout Contamination**: Clean JSON-RPC communication
+- ✅ **Cross-platform Support**: Windows, macOS, and Linux compatibility
 
 ## Features
 
@@ -22,17 +34,39 @@ This is a Go port of the original [tab-transfer](https://github.com/machinateur/
 
 Add this configuration to your Claude Desktop config file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
+#### Option 1: Direct Path Configuration (Recommended)
 ```json
 {
   "mcpServers": {
     "android-chrome": {
       "command": "/path/to/mcp-android-chrome",
       "args": ["mcp"],
-      "env": {}
+      "env": {
+        "ADB_PATH": "/Users/yourusername/Library/Android/sdk/platform-tools/adb",
+        "IOS_WEBKIT_DEBUG_PROXY_PATH": "/opt/homebrew/bin/ios_webkit_debug_proxy"
+      }
     }
   }
 }
 ```
+
+**To find your tool paths:**
+- ADB: `which adb`
+- iOS WebKit Debug Proxy: `which ios_webkit_debug_proxy`
+
+#### Option 2: Auto-detection
+```json
+{
+  "mcpServers": {
+    "android-chrome": {
+      "command": "/path/to/mcp-android-chrome",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+The application will automatically detect common installation paths for ADB and iOS WebKit Debug Proxy.
 
 ### Available MCP Tools
 

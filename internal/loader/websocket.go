@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -30,7 +31,7 @@ func NewWebSocketTabRestorer(baseURL string, debug bool) *WebSocketTabRestorer {
 // RestoreTabs restores tabs using WebKit Debug Protocol via WebSocket
 func (w *WebSocketTabRestorer) RestoreTabs(ctx context.Context, tabs []Tab) error {
 	if w.debug {
-		fmt.Printf("Restoring %d tabs via WebSocket\n", len(tabs))
+		fmt.Fprintf(os.Stderr, "Restoring %d tabs via WebSocket\n", len(tabs))
 	}
 
 	// First, get the target page ID
@@ -50,8 +51,8 @@ func (w *WebSocketTabRestorer) RestoreTabs(ctx context.Context, tabs []Tab) erro
 		return fmt.Errorf("failed to open browser: %w", err)
 	}
 
-	fmt.Printf("WebSocket client opened in browser. Please check your iOS device for restored tabs.\n")
-	fmt.Printf("HTML file: %s\n", htmlFile)
+	fmt.Fprintf(os.Stderr, "WebSocket client opened in browser. Please check your iOS device for restored tabs.\n")
+	fmt.Fprintf(os.Stderr, "HTML file: %s\n", htmlFile)
 
 	return nil
 }
@@ -149,7 +150,7 @@ func (w *WebSocketTabRestorer) restoreTabsDirect(ctx context.Context, tabs []Tab
 		}
 
 		if w.debug {
-			fmt.Printf("Restored tab %d: %s\n", i+1, tab.Title)
+			fmt.Fprintf(os.Stderr, "Restored tab %d: %s\n", i+1, tab.Title)
 		}
 
 		// Small delay between restorations

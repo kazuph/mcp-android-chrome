@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 )
 
@@ -32,7 +33,7 @@ func NewHTTPTabLoader(url string, timeout time.Duration, debug bool) *HTTPTabLoa
 // LoadTabs retrieves tabs from Chrome DevTools Protocol endpoint
 func (h *HTTPTabLoader) LoadTabs(ctx context.Context) ([]Tab, error) {
 	if h.debug {
-		fmt.Printf("Loading tabs from: %s\n", h.url)
+		fmt.Fprintf(os.Stderr, "Loading tabs from: %s\n", h.url)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", h.url, nil)
@@ -56,7 +57,7 @@ func (h *HTTPTabLoader) LoadTabs(ctx context.Context) ([]Tab, error) {
 	}
 
 	if h.debug {
-		fmt.Printf("Loaded %d tabs\n", len(tabs))
+		fmt.Fprintf(os.Stderr, "Loaded %d tabs\n", len(tabs))
 	}
 
 	return tabs, nil
@@ -85,7 +86,7 @@ func NewHTTPTabRestorer(baseURL string, timeout time.Duration, debug bool) *HTTP
 // RestoreTabs restores tabs using Chrome DevTools Protocol
 func (h *HTTPTabRestorer) RestoreTabs(ctx context.Context, tabs []Tab) error {
 	if h.debug {
-		fmt.Printf("Restoring %d tabs\n", len(tabs))
+		fmt.Fprintf(os.Stderr, "Restoring %d tabs\n", len(tabs))
 	}
 
 	for i, tab := range tabs {
@@ -103,7 +104,7 @@ func (h *HTTPTabRestorer) restoreTab(ctx context.Context, tab Tab, index int) er
 	createURL := fmt.Sprintf("%s/json/new?%s", h.baseURL, url.QueryEscape(tab.URL))
 	
 	if h.debug {
-		fmt.Printf("Restoring tab %d: %s -> %s\n", index+1, tab.Title, tab.URL)
+		fmt.Fprintf(os.Stderr, "Restoring tab %d: %s -> %s\n", index+1, tab.Title, tab.URL)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "PUT", createURL, nil)

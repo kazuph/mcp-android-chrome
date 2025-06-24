@@ -36,6 +36,13 @@ func IsShellCommandAvailable(command string) bool {
 
 // FindADBPath finds the absolute path to ADB command
 func FindADBPath() string {
+	// First check if ADB_PATH environment variable is set
+	if adbPath := os.Getenv("ADB_PATH"); adbPath != "" {
+		if _, err := os.Stat(adbPath); err == nil {
+			return adbPath
+		}
+	}
+	
 	// Try common ADB locations
 	commonPaths := []string{
 		"/Users/kazuph/Library/Android/sdk/platform-tools/adb",
@@ -75,6 +82,13 @@ func FindADBPath() string {
 
 // FindIOSWebKitDebugProxyPath finds the absolute path to ios_webkit_debug_proxy
 func FindIOSWebKitDebugProxyPath() string {
+	// First check if IOS_WEBKIT_DEBUG_PROXY_PATH environment variable is set
+	if proxyPath := os.Getenv("IOS_WEBKIT_DEBUG_PROXY_PATH"); proxyPath != "" {
+		if _, err := os.Stat(proxyPath); err == nil {
+			return proxyPath
+		}
+	}
+	
 	commonPaths := []string{
 		"/opt/homebrew/bin/ios_webkit_debug_proxy",
 		"/usr/local/bin/ios_webkit_debug_proxy",
@@ -101,16 +115,14 @@ func FindIOSWebKitDebugProxyPath() string {
 
 // CheckADBAvailable checks if ADB is available and working
 func CheckADBAvailable() error {
-	if !IsShellCommandAvailable("adb") {
-		return fmt.Errorf("adb command not found in PATH. Install with:\n- macOS: brew install --cask android-platform-tools\n- Linux: sudo apt install android-tools-adb\n- Windows: Download from developer.android.com/tools/releases/platform-tools")
-	}
+	// Try to find ADB path first
+	adbPath := FindADBPath()
 	
 	// Test adb version to ensure it's working
-	adbPath := FindADBPath()
 	cmd := exec.Command(adbPath, "version")
 	output, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("adb command failed: %v. Try restarting ADB with 'adb kill-server && adb start-server'", err)
+		return fmt.Errorf("adb command not found or failed: %v. Install with:\n- macOS: brew install --cask android-platform-tools\n- Linux: sudo apt install android-tools-adb\n- Windows: Download from developer.android.com/tools/releases/platform-tools", err)
 	}
 	
 	if !strings.Contains(string(output), "Android Debug Bridge") {

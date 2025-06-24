@@ -172,7 +172,7 @@ type ReopenTabsArgs struct {
 
 // CheckEnvironmentArgs represents arguments for environment checking
 type CheckEnvironmentArgs struct {
-	Platform string `json:"platform" jsonschema:"description=Specific platform to check (android, ios, or all)"`
+	Platform string `json:"platform" jsonschema:"description=Platform: android, ios, or all"`
 }
 
 // copyTabsAndroid implements the Android tab copying tool

@@ -3,6 +3,7 @@ package driver
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"time"
 
@@ -40,7 +41,7 @@ func (d *IOSDriver) Start(ctx context.Context) error {
 	d.cmd = exec.CommandContext(ctx, proxyPath, args...)
 	
 	if d.config.Debug {
-		fmt.Printf("Executing: %s\n", d.cmd.String())
+		fmt.Fprintf(os.Stderr, "Executing: %s\n", d.cmd.String())
 	}
 	
 	if err := d.cmd.Start(); err != nil {
@@ -65,7 +66,7 @@ func (d *IOSDriver) Stop(ctx context.Context) error {
 	}
 
 	if d.config.Debug {
-		fmt.Println("Terminating ios_webkit_debug_proxy process")
+		fmt.Fprintln(os.Stderr, "Terminating ios_webkit_debug_proxy process")
 	}
 
 	if err := d.cmd.Process.Kill(); err != nil {

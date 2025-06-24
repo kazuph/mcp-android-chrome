@@ -6,8 +6,29 @@
 
 ## Recommended Configuration
 
-### Option 1: Basic Configuration (Recommended)
-The application now automatically detects ADB and iOS WebKit Debug Proxy paths, so a basic configuration should work:
+### Option 1: Direct Path Configuration (Recommended)
+Specify the exact paths to your tools using environment variables:
+
+```json
+{
+  "mcpServers": {
+    "android-chrome": {
+      "command": "/Users/kazuph/src/github.com/machinateur/tab-transfer/mcp-android-chrome",
+      "args": ["mcp"],
+      "env": {
+        "ADB_PATH": "/Users/kazuph/Library/Android/sdk/platform-tools/adb",
+        "IOS_WEBKIT_DEBUG_PROXY_PATH": "/opt/homebrew/bin/ios_webkit_debug_proxy"
+      }
+    }
+  }
+}
+```
+
+To find your ADB path, run: `which adb`
+To find your iOS WebKit Debug Proxy path, run: `which ios_webkit_debug_proxy`
+
+### Option 2: Basic Configuration (Auto-detection)
+The application can automatically detect common tool locations:
 
 ```json
 {
@@ -15,42 +36,6 @@ The application now automatically detects ADB and iOS WebKit Debug Proxy paths, 
     "android-chrome": {
       "command": "/Users/kazuph/src/github.com/machinateur/tab-transfer/mcp-android-chrome",
       "args": ["mcp"]
-    }
-  }
-}
-```
-
-### Option 2: Explicit PATH Configuration (If Needed)
-If you encounter PATH-related issues, you can explicitly set the PATH environment variable:
-
-```json
-{
-  "mcpServers": {
-    "android-chrome": {
-      "command": "/Users/kazuph/src/github.com/machinateur/tab-transfer/mcp-android-chrome",
-      "args": ["mcp"],
-      "env": {
-        "PATH": "/Users/kazuph/Library/Android/sdk/platform-tools:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-      }
-    }
-  }
-}
-```
-
-### Option 3: Full Environment Configuration
-For maximum compatibility, you can set multiple environment variables:
-
-```json
-{
-  "mcpServers": {
-    "android-chrome": {
-      "command": "/Users/kazuph/src/github.com/machinateur/tab-transfer/mcp-android-chrome",
-      "args": ["mcp"],
-      "env": {
-        "PATH": "/Users/kazuph/Library/Android/sdk/platform-tools:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
-        "ANDROID_HOME": "/Users/kazuph/Library/Android/sdk",
-        "ANDROID_SDK_ROOT": "/Users/kazuph/Library/Android/sdk"
-      }
     }
   }
 }

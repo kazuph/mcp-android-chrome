@@ -3,6 +3,7 @@ package driver
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"time"
 
@@ -41,7 +42,7 @@ func (d *AndroidDriver) Start(ctx context.Context) error {
 		fmt.Sprintf("localabstract:%s", d.config.Socket))
 	
 	if d.config.Debug {
-		fmt.Printf("Executing: %s\n", cmd.String())
+		fmt.Fprintf(os.Stderr, "Executing: %s\n", cmd.String())
 	}
 	
 	if err := cmd.Run(); err != nil {
@@ -70,7 +71,7 @@ func (d *AndroidDriver) Stop(ctx context.Context) error {
 		fmt.Sprintf("tcp:%d", d.config.Port))
 	
 	if d.config.Debug {
-		fmt.Printf("Executing cleanup: %s\n", cmd.String())
+		fmt.Fprintf(os.Stderr, "Executing cleanup: %s\n", cmd.String())
 	}
 	
 	if err := cmd.Run(); err != nil {
