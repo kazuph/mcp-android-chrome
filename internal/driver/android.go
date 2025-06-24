@@ -34,8 +34,9 @@ func (d *AndroidDriver) Start(ctx context.Context) error {
 		return fmt.Errorf("device connection check failed: %w", err)
 	}
 
-	// Setup ADB port forwarding
-	cmd := exec.CommandContext(ctx, "adb", "-d", "forward", 
+	// Setup ADB port forwarding using absolute path
+	adbPath := platform.FindADBPath()
+	cmd := exec.CommandContext(ctx, adbPath, "-d", "forward", 
 		fmt.Sprintf("tcp:%d", d.config.Port),
 		fmt.Sprintf("localabstract:%s", d.config.Socket))
 	
@@ -64,7 +65,8 @@ func (d *AndroidDriver) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	cmd := exec.CommandContext(ctx, "adb", "-d", "forward", "--remove",
+	adbPath := platform.FindADBPath()
+	cmd := exec.CommandContext(ctx, adbPath, "-d", "forward", "--remove",
 		fmt.Sprintf("tcp:%d", d.config.Port))
 	
 	if d.config.Debug {

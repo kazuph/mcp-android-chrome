@@ -36,7 +36,8 @@ func (d *IOSDriver) Start(ctx context.Context) error {
 		args = append(args, "--debug")
 	}
 	
-	d.cmd = exec.CommandContext(ctx, "ios_webkit_debug_proxy", args...)
+	proxyPath := platform.FindIOSWebKitDebugProxyPath()
+	d.cmd = exec.CommandContext(ctx, proxyPath, args...)
 	
 	if d.config.Debug {
 		fmt.Printf("Executing: %s\n", d.cmd.String())

@@ -2,6 +2,7 @@ package platform
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -33,6 +34,71 @@ func IsShellCommandAvailable(command string) bool {
 	return err == nil
 }
 
+// FindADBPath finds the absolute path to ADB command
+func FindADBPath() string {
+	// Try common ADB locations
+	commonPaths := []string{
+		"/Users/kazuph/Library/Android/sdk/platform-tools/adb",
+		"/opt/homebrew/bin/adb",
+		"/usr/local/bin/adb",
+		"adb", // Fallback to PATH
+	}
+	
+	if IsWindows() {
+		commonPaths = []string{
+			"C:\\Users\\%USERNAME%\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+			"C:\\Android\\platform-tools\\adb.exe",
+			"adb.exe",
+		}
+	}
+	
+	for _, path := range commonPaths {
+		if path == "adb" || path == "adb.exe" {
+			// Test if command exists in PATH
+			cmd := exec.Command("which", "adb")
+			if IsWindows() {
+				cmd = exec.Command("where", "adb.exe")
+			}
+			if cmd.Run() == nil {
+				return path
+			}
+		} else {
+			// Test if file exists at absolute path
+			if _, err := os.Stat(path); err == nil {
+				return path
+			}
+		}
+	}
+	
+	return "adb" // Fallback
+}
+
+// FindIOSWebKitDebugProxyPath finds the absolute path to ios_webkit_debug_proxy
+func FindIOSWebKitDebugProxyPath() string {
+	commonPaths := []string{
+		"/opt/homebrew/bin/ios_webkit_debug_proxy",
+		"/usr/local/bin/ios_webkit_debug_proxy",
+		"ios_webkit_debug_proxy", // Fallback to PATH
+	}
+	
+	for _, path := range commonPaths {
+		if path == "ios_webkit_debug_proxy" {
+			// Test if command exists in PATH
+			cmd := exec.Command("which", "ios_webkit_debug_proxy")
+			if cmd.Run() == nil {
+				return path
+			}
+		} else {
+			// Test if file exists at absolute path
+			if _, err := os.Stat(path); err == nil {
+				return path
+			}
+		}
+	}
+	
+	return "ios_webkit_debug_proxy" // Fallback
+}
+
 // CheckADBAvailable checks if ADB is available and working
 func CheckADBAvailable() error {
 	if !IsShellCommandAvailable("adb") {
@@ -40,7 +106,8 @@ func CheckADBAvailable() error {
 	}
 	
 	// Test adb version to ensure it's working
-	cmd := exec.Command("adb", "version")
+	adbPath := FindADBPath()
+	cmd := exec.Command(adbPath, "version")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("adb command failed: %v. Try restarting ADB with 'adb kill-server && adb start-server'", err)
@@ -55,7 +122,8 @@ func CheckADBAvailable() error {
 
 // CheckADBDeviceConnected checks if any Android devices are connected
 func CheckADBDeviceConnected() error {
-	cmd := exec.Command("adb", "devices")
+	adbPath := FindADBPath()
+	cmd := exec.Command(adbPath, "devices")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to list ADB devices: %v", err)
@@ -96,7 +164,8 @@ func CheckIOSWebKitDebugProxyAvailable() error {
 	}
 	
 	// Test help output to ensure it's working
-	cmd := exec.Command("ios_webkit_debug_proxy", "--help")
+	proxyPath := FindIOSWebKitDebugProxyPath()
+	cmd := exec.Command(proxyPath, "--help")
 	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("ios_webkit_debug_proxy command failed: %v", err)
