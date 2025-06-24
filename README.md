@@ -12,6 +12,14 @@ This is a Go port of the original [tab-transfer](https://github.com/machinateur/
 
 **Original tool by machinateur, Go port by kazuph.**
 
+## What's New in v0.9.1
+
+- ✅ **Enhanced Tab Management**: Comprehensive tab closing functionality
+- ✅ **Auto-populating Tab Cache**: Automatic Android tab fetching on startup
+- ✅ **YAML Format Support**: Both JSON and YAML output formats
+- ✅ **Advanced Tab Search**: Powerful search with relevance scoring
+- ✅ **Tab Closing Tools**: Single and bulk tab closing with safety confirmations
+
 ## What's New in v0.9.0
 
 - ✅ **Full MCP Server Implementation**: Complete integration with Claude Desktop
@@ -74,10 +82,45 @@ The application will automatically detect common installation paths for ADB and 
 - **`copy_tabs_ios`**: Copy Chrome/Safari tabs from iOS device via WebKit Debug Proxy  
 - **`reopen_tabs`**: Restore saved tabs to mobile devices
 - **`check_environment`**: Verify system dependencies
+- **`refresh_tab_cache`**: Manually refresh the current tab cache from Android device
+- **`cache_status`**: Check the current status of the tab cache
+- **`close_tab`**: Close a single tab on Android device by tab ID
+- **`close_tabs_bulk`**: Close multiple tabs at once with filtering capabilities
+- **`search_tabs`**: Search through cached tabs with advanced filtering and ranking
 
 ### Available MCP Resources
 
-- **`tabs://current`**: Access to currently loaded tabs (JSON format)
+- **`tabs://current`**: Access to currently cached tabs (YAML format)
+
+### New Features Usage Examples
+
+#### Tab Search
+```json
+{
+  "query": "github",
+  "domain": "github.com",
+  "limit": 5,
+  "format": "yaml"
+}
+```
+
+#### Tab Closing (with safety confirmations)
+```json
+{
+  "tabId": "12345",
+  "platform": "android",
+  "confirm": true
+}
+```
+
+#### Bulk Tab Closing with Filters
+```json
+{
+  "filterUrl": "reddit.com",
+  "dryRun": true,
+  "platform": "android"
+}
+```
 
 ## Requirements
 

@@ -97,3 +97,34 @@ func DefaultFormatter() *TabFormatter {
 func YAMLFormatter() *TabFormatter {
 	return NewTabFormatter(FormatYAML)
 }
+
+// JSONFormatter returns a JSON formatter
+func JSONFormatter() *TabFormatter {
+	return NewTabFormatter(FormatJSON)
+}
+
+// SearchResult represents a search result with relevance scoring
+type SearchResult struct {
+	Tab   loader.Tab `json:"tab" yaml:"tab"`
+	Score float64    `json:"score" yaml:"score"`
+}
+
+// FormatSearchResults formats search results in the specified format
+func (f *TabFormatter) FormatSearchResults(results interface{}) (string, error) {
+	switch f.format {
+	case FormatJSON:
+		data, err := json.MarshalIndent(results, "", "  ")
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal search results as JSON: %w", err)
+		}
+		return string(data), nil
+	case FormatYAML:
+		data, err := yaml.Marshal(results)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal search results as YAML: %w", err)
+		}
+		return string(data), nil
+	default:
+		return "", fmt.Errorf("unsupported format: %s", f.format)
+	}
+}

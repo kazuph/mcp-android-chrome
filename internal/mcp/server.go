@@ -287,6 +287,29 @@ Safety: Use dryRun=true first to preview the operation.`, s.closeTabsBulk)
 		return fmt.Errorf("failed to register close_tabs_bulk: %w", err)
 	}
 
+	// Tool 9: Search tabs
+	err = s.server.RegisterTool("search_tabs", `Search through currently cached tabs with advanced filtering and ranking.
+
+This tool provides powerful search capabilities across cached tabs, including:
+- Full-text search across URLs and titles
+- Fuzzy matching for partial queries
+- Domain-based filtering
+- Relevance scoring and ranking
+- Multiple search criteria combination
+
+Arguments:
+- query (optional): Search query to match against URLs and titles
+- domain (optional): Filter by specific domain (e.g., "github.com")
+- title (optional): Search specifically in tab titles
+- url (optional): Search specifically in URLs
+- limit (optional): Maximum number of results to return (default: 10)
+- format (optional): Output format: json or yaml (default: json)
+
+Returns ranked results with relevance scores for better search experience.`, s.searchTabs)
+	if err != nil {
+		return fmt.Errorf("failed to register search_tabs: %w", err)
+	}
+
 	return nil
 }
 
@@ -644,6 +667,16 @@ type CloseTabsBulkArgs struct {
 	DryRun      bool     `json:"dryRun" jsonschema:"description=Preview operation without actually closing tabs (default: false)"`
 }
 
+// SearchTabsArgs represents arguments for tab searching
+type SearchTabsArgs struct {
+	Query  string `json:"query" jsonschema:"description=Search query to match against URLs and titles"`
+	Domain string `json:"domain" jsonschema:"description=Filter by specific domain (e.g. github.com)"`
+	Title  string `json:"title" jsonschema:"description=Search specifically in tab titles"`
+	URL    string `json:"url" jsonschema:"description=Search specifically in URLs"`
+	Limit  int    `json:"limit" jsonschema:"description=Maximum number of results to return (default: 10)"`
+	Format string `json:"format" jsonschema:"description=Output format: json or yaml (default: json)"`
+}
+
 // cacheStatus implements the cache status tool
 func (s *TabTransferServer) cacheStatus(args CacheStatusArgs) (*mcp_golang.ToolResponse, error) {
 	s.cacheMutex.RLock()
@@ -873,4 +906,139 @@ func matchesPattern(text, pattern string) bool {
 	
 	// For now, simple contains check - can be enhanced later
 	return strings.Contains(strings.ToLower(text), strings.ToLower(pattern))
+}
+
+
+// searchTabs implements the tab search tool
+func (s *TabTransferServer) searchTabs(args SearchTabsArgs) (*mcp_golang.ToolResponse, error) {
+	// Set defaults
+	if args.Limit == 0 {
+		args.Limit = 10
+	}
+	
+	// Get cached tabs
+	s.cacheMutex.RLock()
+	cachedTabs := make([]loader.Tab, len(s.tabCache))
+	copy(cachedTabs, s.tabCache)
+	s.cacheMutex.RUnlock()
+	
+	if len(cachedTabs) == 0 {
+		return mcp_golang.NewToolResponse(mcp_golang.NewTextContent("No tabs are currently cached. Use refresh_tab_cache tool to populate cache first.")), nil
+	}
+	
+	// Apply filters and calculate relevance scores
+	var results []format.SearchResult
+	
+	for _, tab := range cachedTabs {
+		score := 0.0
+		matches := true
+		
+		// Apply domain filter
+		if args.Domain != "" {
+			if !strings.Contains(strings.ToLower(tab.URL), strings.ToLower(args.Domain)) {
+				matches = false
+			} else {
+				score += 2.0 // Domain match gets high score
+			}
+		}
+		
+		// Apply title filter
+		if args.Title != "" {
+			if !strings.Contains(strings.ToLower(tab.Title), strings.ToLower(args.Title)) {
+				matches = false
+			} else {
+				score += 1.5 // Title match gets medium-high score
+			}
+		}
+		
+		// Apply URL filter
+		if args.URL != "" {
+			if !strings.Contains(strings.ToLower(tab.URL), strings.ToLower(args.URL)) {
+				matches = false
+			} else {
+				score += 1.0 // URL match gets medium score
+			}
+		}
+		
+		// Apply general query filter
+		if args.Query != "" {
+			queryLower := strings.ToLower(args.Query)
+			titleMatch := strings.Contains(strings.ToLower(tab.Title), queryLower)
+			urlMatch := strings.Contains(strings.ToLower(tab.URL), queryLower)
+			
+			if !titleMatch && !urlMatch {
+				matches = false
+			} else {
+				if titleMatch {
+					score += 1.0
+				}
+				if urlMatch {
+					score += 0.5
+				}
+				
+				// Bonus for exact matches
+				if strings.EqualFold(tab.Title, args.Query) {
+					score += 2.0
+				}
+				
+				// Bonus for query appearing at the start
+				if strings.HasPrefix(strings.ToLower(tab.Title), queryLower) {
+					score += 1.0
+				}
+			}
+		}
+		
+		// If no filters provided, include all tabs with minimal score
+		if args.Query == "" && args.Domain == "" && args.Title == "" && args.URL == "" {
+			matches = true
+			score = 0.1
+		}
+		
+		if matches {
+			results = append(results, format.SearchResult{
+				Tab:   tab,
+				Score: score,
+			})
+		}
+	}
+	
+	// Sort by relevance score (descending)
+	for i := 0; i < len(results)-1; i++ {
+		for j := i + 1; j < len(results); j++ {
+			if results[i].Score < results[j].Score {
+				results[i], results[j] = results[j], results[i]
+			}
+		}
+	}
+	
+	// Limit results
+	if len(results) > args.Limit {
+		results = results[:args.Limit]
+	}
+	
+	// Determine output format
+	outputFormat := format.FormatJSON
+	if args.Format != "" {
+		if parsedFormat, err := format.ParseFormat(args.Format); err == nil {
+			outputFormat = parsedFormat
+		}
+	}
+	
+	// Format output
+	var resultText string
+	if outputFormat == format.FormatYAML {
+		yamlData, err := format.YAMLFormatter().FormatSearchResults(results)
+		if err != nil {
+			return nil, fmt.Errorf("failed to format search results as YAML: %w", err)
+		}
+		resultText = fmt.Sprintf("🔍 Found %d tabs matching search criteria (format: yaml):\n\n%s", len(results), yamlData)
+	} else {
+		jsonData, err := format.JSONFormatter().FormatSearchResults(results)
+		if err != nil {
+			return nil, fmt.Errorf("failed to format search results as JSON: %w", err)
+		}
+		resultText = fmt.Sprintf("🔍 Found %d tabs matching search criteria (format: json):\n\n%s", len(results), jsonData)
+	}
+	
+	return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(resultText)), nil
 }
