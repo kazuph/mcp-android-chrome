@@ -29,6 +29,11 @@ func (d *AndroidDriver) Start(ctx context.Context) error {
 		return fmt.Errorf("environment check failed: %w", err)
 	}
 
+	// Check if Android device is connected
+	if err := platform.CheckADBDeviceConnected(); err != nil {
+		return fmt.Errorf("device connection check failed: %w", err)
+	}
+
 	// Setup ADB port forwarding
 	cmd := exec.CommandContext(ctx, "adb", "-d", "forward", 
 		fmt.Sprintf("tcp:%d", d.config.Port),

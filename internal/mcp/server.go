@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	mcp_golang "github.com/metoro-io/mcp-golang"
@@ -46,25 +47,78 @@ func (s *TabTransferServer) Start() error {
 // registerTools registers all available MCP tools
 func (s *TabTransferServer) registerTools() error {
 	// Tool 1: Copy tabs from Android
-	err := s.server.RegisterTool("copy_tabs_android", "Copy Chrome tabs from Android device via ADB", s.copyTabsAndroid)
+	err := s.server.RegisterTool("copy_tabs_android", `Copy Chrome tabs from Android device via ADB.
+
+Prerequisites:
+1. Android device with USB debugging enabled (Settings > Developer Options > USB Debugging)
+2. ADB (Android Debug Bridge) installed and in PATH
+3. Chrome browser running on Android device
+4. USB cable connecting device to computer
+5. Device unlocked and USB debugging permission granted
+
+Common Issues & Solutions:
+- "adb command not found": Install Android Platform Tools
+  - macOS: brew install --cask android-platform-tools
+  - Linux: sudo apt install android-tools-adb
+  - Windows: Download from developer.android.com
+- "device unauthorized": Check device screen for USB debugging prompt and tap "Allow"
+- "no devices found": Ensure USB cable supports data transfer (not just charging)
+- "connection refused": Restart ADB with 'adb kill-server && adb start-server'
+
+This tool will automatically check environment and provide specific error messages if prerequisites are not met.`, s.copyTabsAndroid)
 	if err != nil {
 		return fmt.Errorf("failed to register copy_tabs_android: %w", err)
 	}
 
 	// Tool 2: Copy tabs from iOS
-	err = s.server.RegisterTool("copy_tabs_ios", "Copy Chrome/Safari tabs from iOS device via WebKit Debug Proxy", s.copyTabsIOS)
+	err = s.server.RegisterTool("copy_tabs_ios", `Copy Chrome/Safari tabs from iOS device via WebKit Debug Proxy.
+
+Prerequisites:
+1. iOS device with Web Inspector enabled (Settings > Safari > Advanced > Web Inspector)
+2. For Chrome: Enable Web Inspector in Chrome Settings > Privacy and Security > Site Settings
+3. iOS WebKit Debug Proxy installed and in PATH
+4. USB cable connecting device to computer
+5. Trust computer when prompted on iOS device
+6. iOS 16.4+ for Chrome support (Safari works on older versions)
+
+Common Issues & Solutions:
+- "ios_webkit_debug_proxy command not found": Install WebKit Debug Proxy
+  - macOS: brew install ios-webkit-debug-proxy
+  - Linux: See github.com/google/ios-webkit-debug-proxy for build instructions
+  - Windows: Not officially supported
+- "Could not connect to device": Ensure device is unlocked and trusted
+- "No targets found": Make sure Safari/Chrome is running and has open tabs
+- "Connection timeout": Try disconnecting and reconnecting USB cable
+
+This tool will automatically check environment and provide specific error messages if prerequisites are not met.`, s.copyTabsIOS)
 	if err != nil {
 		return fmt.Errorf("failed to register copy_tabs_ios: %w", err)
 	}
 
 	// Tool 3: Reopen tabs
-	err = s.server.RegisterTool("reopen_tabs", "Restore saved tabs to mobile device", s.reopenTabs)
+	err = s.server.RegisterTool("reopen_tabs", `Restore saved tabs to mobile device.
+
+This tool takes previously exported tabs (from copy_tabs_android or copy_tabs_ios) and reopens them on the target device.
+
+Prerequisites (same as copy tools):
+- For Android: ADB installed, USB debugging enabled, device connected
+- For iOS: iOS WebKit Debug Proxy installed, Web Inspector enabled, device connected
+
+The tool automatically detects platform-specific requirements and provides detailed error messages for troubleshooting.`, s.reopenTabs)
 	if err != nil {
 		return fmt.Errorf("failed to register reopen_tabs: %w", err)
 	}
 
 	// Tool 4: Check environment
-	err = s.server.RegisterTool("check_environment", "Check system dependencies (ADB, iOS WebKit Debug Proxy)", s.checkEnvironment)
+	err = s.server.RegisterTool("check_environment", `Check system dependencies and device connectivity.
+
+This diagnostic tool verifies:
+1. ADB (Android Debug Bridge) installation and functionality
+2. iOS WebKit Debug Proxy installation and functionality
+3. Device connectivity status
+4. USB debugging permissions
+
+Use this tool first to diagnose setup issues before attempting tab operations. It provides specific installation commands and troubleshooting steps for each platform.`, s.checkEnvironment)
 	if err != nil {
 		return fmt.Errorf("failed to register check_environment: %w", err)
 	}
@@ -304,25 +358,61 @@ func (s *TabTransferServer) checkEnvironment(args CheckEnvironmentArgs) (*mcp_go
 	}
 
 	if checkPlatform == "all" || checkPlatform == "android" {
+		// Check ADB installation
 		if err := platform.CheckADBAvailable(); err != nil {
-			results["android"] = fmt.Sprintf("❌ ADB not available: %v", err)
+			results["android_adb"] = fmt.Sprintf("❌ ADB: %v", err)
 		} else {
-			results["android"] = "✅ ADB available and working"
+			results["android_adb"] = "✅ ADB: Available and working"
+		}
+		
+		// Check Android device connection
+		if err := platform.CheckADBDeviceConnected(); err != nil {
+			results["android_device"] = fmt.Sprintf("❌ Android Device: %v", err)
+		} else {
+			results["android_device"] = "✅ Android Device: Connected and authorized"
 		}
 	}
 
 	if checkPlatform == "all" || checkPlatform == "ios" {
+		// Check iOS WebKit Debug Proxy installation
 		if err := platform.CheckIOSWebKitDebugProxyAvailable(); err != nil {
-			results["ios"] = fmt.Sprintf("❌ iOS WebKit Debug Proxy not available: %v", err)
+			results["ios_proxy"] = fmt.Sprintf("❌ iOS WebKit Debug Proxy: %v", err)
 		} else {
-			results["ios"] = "✅ iOS WebKit Debug Proxy available and working"
+			results["ios_proxy"] = "✅ iOS WebKit Debug Proxy: Available and working"
+		}
+		
+		// iOS device connection check (informational)
+		if err := platform.CheckIOSDeviceConnected(); err != nil {
+			results["ios_device"] = fmt.Sprintf("ℹ️ iOS Device: %v", err)
+		} else {
+			results["ios_device"] = "✅ iOS Device: Connection verified"
 		}
 	}
 
 	// Format results
 	resultText := "Environment Check Results:\n\n"
-	for platform, status := range results {
-		resultText += fmt.Sprintf("%s: %s\n", platform, status)
+	for _, status := range results {
+		resultText += fmt.Sprintf("%s\n", status)
+	}
+	
+	// Add quick fix suggestions
+	hasErrors := strings.Contains(resultText, "❌")
+	if hasErrors {
+		resultText += "\n🔧 Quick Fixes:\n"
+		if strings.Contains(resultText, "adb command not found") {
+			resultText += "• Install ADB: Run the installation command shown above\n"
+		}
+		if strings.Contains(resultText, "no Android devices found") {
+			resultText += "• Connect Android device and enable USB debugging\n"
+		}
+		if strings.Contains(resultText, "unauthorized") {
+			resultText += "• Check Android device screen for USB debugging prompt\n"
+		}
+		if strings.Contains(resultText, "ios_webkit_debug_proxy command not found") {
+			resultText += "• Install iOS WebKit Debug Proxy: Run the installation command shown above\n"
+		}
+	} else {
+		resultText += "\n✅ All systems ready for tab transfer operations!"
 	}
 
 	return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(resultText)), nil
