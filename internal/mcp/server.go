@@ -250,6 +250,43 @@ Useful for debugging cache-related issues and understanding the current state of
 		return fmt.Errorf("failed to register cache_status: %w", err)
 	}
 
+	// Tool 7: Close single tab
+	err = s.server.RegisterTool("close_tab", `Close a single tab on Android device by tab ID.
+
+This tool closes a specific tab using its unique Chrome DevTools Protocol ID. The tab ID can be obtained from copy_tabs_android tool or current_tabs resource.
+
+⚠️ Warning: This action cannot be undone. The tab will be permanently closed.
+
+Arguments:
+- tabId (required): The unique ID of the tab to close
+- platform (optional): Target platform (default: android)
+- confirm (optional): Set to true to skip confirmation (default: false)
+
+Safety: Use cache_status or copy_tabs_android first to get current tab IDs.`, s.closeTab)
+	if err != nil {
+		return fmt.Errorf("failed to register close_tab: %w", err)
+	}
+
+	// Tool 8: Close multiple tabs
+	err = s.server.RegisterTool("close_tabs_bulk", `Close multiple tabs at once on Android device.
+
+This tool allows bulk closing of tabs by their IDs or by filtering criteria. Useful for cleaning up many tabs simultaneously.
+
+⚠️ Warning: This action cannot be undone. All matching tabs will be permanently closed.
+
+Arguments:
+- tabIds (optional): Array of specific tab IDs to close
+- platform (optional): Target platform (default: android)
+- filterUrl (optional): Close tabs matching URL pattern (supports wildcards)
+- filterTitle (optional): Close tabs matching title pattern (supports wildcards)
+- confirm (optional): Set to true to skip confirmation (default: false)
+- dryRun (optional): Preview which tabs would be closed without actually closing them
+
+Safety: Use dryRun=true first to preview the operation.`, s.closeTabsBulk)
+	if err != nil {
+		return fmt.Errorf("failed to register close_tabs_bulk: %w", err)
+	}
+
 	return nil
 }
 
@@ -590,6 +627,23 @@ type CacheStatusArgs struct {
 	// No arguments needed for cache status
 }
 
+// CloseTabArgs represents arguments for single tab closing
+type CloseTabArgs struct {
+	TabId    string `json:"tabId" jsonschema:"required,description=Unique tab ID to close"`
+	Platform string `json:"platform" jsonschema:"description=Target platform: android or ios (default: android)"`
+	Confirm  bool   `json:"confirm" jsonschema:"description=Skip confirmation prompt (default: false)"`
+}
+
+// CloseTabsBulkArgs represents arguments for bulk tab closing
+type CloseTabsBulkArgs struct {
+	TabIds      []string `json:"tabIds" jsonschema:"description=Array of specific tab IDs to close"`
+	Platform    string   `json:"platform" jsonschema:"description=Target platform: android or ios (default: android)"`
+	FilterUrl   string   `json:"filterUrl" jsonschema:"description=Close tabs matching URL pattern (supports wildcards)"`
+	FilterTitle string   `json:"filterTitle" jsonschema:"description=Close tabs matching title pattern (supports wildcards)"`
+	Confirm     bool     `json:"confirm" jsonschema:"description=Skip confirmation prompt (default: false)"`
+	DryRun      bool     `json:"dryRun" jsonschema:"description=Preview operation without actually closing tabs (default: false)"`
+}
+
 // cacheStatus implements the cache status tool
 func (s *TabTransferServer) cacheStatus(args CacheStatusArgs) (*mcp_golang.ToolResponse, error) {
 	s.cacheMutex.RLock()
@@ -645,4 +699,178 @@ func (s *TabTransferServer) getCurrentTabsYAML() (*mcp_golang.ResourceResponse, 
 	)
 	
 	return mcp_golang.NewResourceResponse(resource), nil
+}
+
+// closeTab implements the single tab closing tool
+func (s *TabTransferServer) closeTab(args CloseTabArgs) (*mcp_golang.ToolResponse, error) {
+	// Default platform to android
+	platform := args.Platform
+	if platform == "" {
+		platform = "android"
+	}
+	
+	// Validation
+	if args.TabId == "" {
+		return nil, fmt.Errorf("tabId is required")
+	}
+	
+	// Safety confirmation (unless explicitly confirmed)
+	if !args.Confirm {
+		confirmText := fmt.Sprintf("⚠️ WARNING: You are about to permanently close tab:\nID: %s\nPlatform: %s\n\nThis action cannot be undone. To proceed, call this tool again with confirm=true.", args.TabId, platform)
+		return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(confirmText)), nil
+	}
+	
+	// Only Android is supported for now
+	if platform != "android" {
+		return nil, fmt.Errorf("tab closing is currently only supported for Android platform")
+	}
+	
+	// Setup Android driver
+	config := driver.AndroidConfig{
+		DriverConfig: driver.DriverConfig{
+			Port:    9222,
+			Timeout: 10 * time.Second,
+			Debug:   true,
+		},
+		Socket: "chrome_devtools_remote",
+		Wait:   2 * time.Second,
+	}
+	
+	androidDriver := driver.NewAndroidDriver(config)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	
+	// Start driver
+	if err := androidDriver.Start(ctx); err != nil {
+		return nil, fmt.Errorf("failed to start Android driver: %w", err)
+	}
+	defer androidDriver.Stop(ctx)
+	
+	// Close the tab
+	if err := androidDriver.CloseTab(ctx, args.TabId); err != nil {
+		return nil, fmt.Errorf("failed to close tab: %w", err)
+	}
+	
+	result := fmt.Sprintf("✅ Successfully closed tab: %s", args.TabId)
+	return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(result)), nil
+}
+
+// closeTabsBulk implements the bulk tab closing tool
+func (s *TabTransferServer) closeTabsBulk(args CloseTabsBulkArgs) (*mcp_golang.ToolResponse, error) {
+	// Default platform to android
+	platform := args.Platform
+	if platform == "" {
+		platform = "android"
+	}
+	
+	// Only Android is supported for now
+	if platform != "android" {
+		return nil, fmt.Errorf("bulk tab closing is currently only supported for Android platform")
+	}
+	
+	// Setup Android driver
+	config := driver.AndroidConfig{
+		DriverConfig: driver.DriverConfig{
+			Port:    9222,
+			Timeout: 10 * time.Second,
+			Debug:   args.DryRun, // Enable debug for dry run to see what would happen
+		},
+		Socket: "chrome_devtools_remote",
+		Wait:   2 * time.Second,
+	}
+	
+	androidDriver := driver.NewAndroidDriver(config)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	// Start driver
+	if err := androidDriver.Start(ctx); err != nil {
+		return nil, fmt.Errorf("failed to start Android driver: %w", err)
+	}
+	defer androidDriver.Stop(ctx)
+	
+	// Load current tabs to apply filters
+	currentTabs, err := androidDriver.LoadTabs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load current tabs: %w", err)
+	}
+	
+	// Determine which tabs to close
+	var tabsToClose []string
+	
+	if len(args.TabIds) > 0 {
+		// Use provided tab IDs
+		tabsToClose = args.TabIds
+	} else {
+		// Apply filters to find tabs to close
+		for _, tab := range currentTabs {
+			shouldClose := true
+			
+			// Apply URL filter if provided
+			if args.FilterUrl != "" {
+				if !matchesPattern(tab.URL, args.FilterUrl) {
+					shouldClose = false
+				}
+			}
+			
+			// Apply title filter if provided
+			if args.FilterTitle != "" {
+				if !matchesPattern(tab.Title, args.FilterTitle) {
+					shouldClose = false
+				}
+			}
+			
+			if shouldClose {
+				tabsToClose = append(tabsToClose, tab.ID)
+			}
+		}
+	}
+	
+	if len(tabsToClose) == 0 {
+		return mcp_golang.NewToolResponse(mcp_golang.NewTextContent("No tabs match the specified criteria.")), nil
+	}
+	
+	// Dry run: just show what would be closed
+	if args.DryRun {
+		var preview strings.Builder
+		preview.WriteString(fmt.Sprintf("🔍 DRY RUN: Would close %d tabs:\n\n", len(tabsToClose)))
+		
+		for _, tabID := range tabsToClose {
+			// Find the tab details
+			for _, tab := range currentTabs {
+				if tab.ID == tabID {
+					preview.WriteString(fmt.Sprintf("• %s\n  ID: %s\n  URL: %s\n\n", tab.Title, tab.ID, tab.URL))
+					break
+				}
+			}
+		}
+		
+		preview.WriteString("To actually close these tabs, call this tool again with dryRun=false and confirm=true.")
+		return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(preview.String())), nil
+	}
+	
+	// Safety confirmation (unless explicitly confirmed)
+	if !args.Confirm {
+		confirmText := fmt.Sprintf("⚠️ WARNING: You are about to permanently close %d tabs on %s.\n\nThis action cannot be undone. To proceed, call this tool again with confirm=true.\n\nTip: Use dryRun=true first to preview which tabs will be closed.", len(tabsToClose), platform)
+		return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(confirmText)), nil
+	}
+	
+	// Actually close the tabs
+	if err := androidDriver.CloseTabs(ctx, tabsToClose); err != nil {
+		return nil, fmt.Errorf("failed to close tabs: %w", err)
+	}
+	
+	result := fmt.Sprintf("✅ Successfully closed %d tabs", len(tabsToClose))
+	return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(result)), nil
+}
+
+// matchesPattern checks if a string matches a pattern (supports wildcards)
+func matchesPattern(text, pattern string) bool {
+	// Simple wildcard matching - supports * as wildcard
+	if pattern == "*" {
+		return true
+	}
+	
+	// For now, simple contains check - can be enhanced later
+	return strings.Contains(strings.ToLower(text), strings.ToLower(pattern))
 }

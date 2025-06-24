@@ -3,6 +3,7 @@ package driver
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"time"
@@ -110,4 +111,70 @@ func (d *AndroidDriver) RestoreTabs(ctx context.Context, tabs []loader.Tab) erro
 	restorer := loader.NewHTTPTabRestorer(baseURL, d.config.Timeout, d.config.Debug)
 	
 	return restorer.RestoreTabs(ctx, tabs)
+}
+
+// CloseTab closes a single tab by its ID
+func (d *AndroidDriver) CloseTab(ctx context.Context, tabID string) error {
+	if d.tabLoader == nil {
+		return fmt.Errorf("driver not started")
+	}
+	
+	closeURL := fmt.Sprintf("http://localhost:%d/json/close/%s", d.config.Port, tabID)
+	
+	if d.config.Debug {
+		fmt.Fprintf(os.Stderr, "Closing tab: %s -> %s\n", tabID, closeURL)
+	}
+	
+	req, err := http.NewRequestWithContext(ctx, "POST", closeURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create close request: %w", err)
+	}
+	
+	client := &http.Client{Timeout: d.config.Timeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to close tab: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code when closing tab: %d", resp.StatusCode)
+	}
+	
+	if d.config.Debug {
+		fmt.Fprintf(os.Stderr, "Successfully closed tab: %s\n", tabID)
+	}
+	
+	return nil
+}
+
+// CloseTabs closes multiple tabs by their IDs
+func (d *AndroidDriver) CloseTabs(ctx context.Context, tabIDs []string) error {
+	if d.tabLoader == nil {
+		return fmt.Errorf("driver not started")
+	}
+	
+	if d.config.Debug {
+		fmt.Fprintf(os.Stderr, "Closing %d tabs\n", len(tabIDs))
+	}
+	
+	var failedTabs []string
+	for _, tabID := range tabIDs {
+		if err := d.CloseTab(ctx, tabID); err != nil {
+			if d.config.Debug {
+				fmt.Fprintf(os.Stderr, "Failed to close tab %s: %v\n", tabID, err)
+			}
+			failedTabs = append(failedTabs, tabID)
+		}
+	}
+	
+	if len(failedTabs) > 0 {
+		return fmt.Errorf("failed to close %d tabs: %v", len(failedTabs), failedTabs)
+	}
+	
+	if d.config.Debug {
+		fmt.Fprintf(os.Stderr, "Successfully closed all %d tabs\n", len(tabIDs))
+	}
+	
+	return nil
 }

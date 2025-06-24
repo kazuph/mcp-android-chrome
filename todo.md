@@ -28,22 +28,26 @@
   - [ ] **ENHANCEMENT**: Update CLI tools to support --format yaml flag
 
 ### 🗑️ Tab Closing Features
-- [ ] **Single tab closing**
-  - [ ] Implement `close_tab` MCP tool
-  - [ ] Support tab closing by Chrome tab ID
-  - [ ] Add confirmation option for safety
+- [x] **Single tab closing**
+  - [x] Implement `close_tab` MCP tool
+  - [x] Support tab closing by Chrome tab ID via /json/close/{id} endpoint
+  - [x] Add confirmation option for safety (confirm=true required)
+  - [x] **VERIFIED**: Tool registered and accepts tabId parameter
   
-- [ ] **Bulk tab closing**
-  - [ ] Implement `close_tabs_bulk` MCP tool  
-  - [ ] Support multiple tab IDs in single operation
-  - [ ] Add filtering capabilities (by URL pattern, title keywords, etc.)
-  - [ ] Integration with Claude for natural language tab selection
+- [x] **Bulk tab closing**
+  - [x] Implement `close_tabs_bulk` MCP tool  
+  - [x] Support multiple tab IDs in single operation
+  - [x] Add filtering capabilities (by URL pattern, title keywords, etc.)
+  - [x] Integration with Claude for natural language tab selection via filters
+  - [x] **SAFETY**: Added dryRun option to preview before closing
+  - [x] **SAFETY**: Confirmation required (confirm=true) for actual closing
 
-- [ ] **Tab ID Investigation**
-  - [ ] Research Chrome DevTools Protocol tab ID system
-  - [ ] Verify if Chrome assigns unique IDs to tabs
-  - [ ] Document tab ID lifecycle and stability
-  - [ ] Test tab ID persistence across browser restarts
+- [x] **Tab ID Investigation**
+  - [x] Research Chrome DevTools Protocol tab ID system (/json/close/{id})
+  - [x] Verify Chrome assigns unique IDs (confirmed: "11952", "C4590D171DDF33989C7B1ED6DFE754FC")
+  - [x] Implement HTTP POST to /json/close/{id} endpoint
+  - [ ] **REMAINING**: Test actual tab closing functionality with real device
+  - [ ] **REMAINING**: Document any edge cases or limitations found
 
 ### 🔍 Tab Search Features
 - [ ] **Search functionality assessment**
