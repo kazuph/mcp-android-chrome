@@ -41,7 +41,13 @@ func (s *TabTransferServer) Start() error {
 	}
 
 	// Start the server
-	return s.server.Serve()
+	err := s.server.Serve()
+	if err != nil {
+		return fmt.Errorf("failed to serve: %w", err)
+	}
+
+	// Keep the server running
+	select {}
 }
 
 // registerTools registers all available MCP tools

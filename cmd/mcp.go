@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"log"
+	"os"
 
 	"github.com/kazuph/mcp-android-chrome/internal/mcp"
 	"github.com/spf13/cobra"
@@ -30,11 +30,14 @@ Configure in Claude Desktop's claude_desktop_config.json:
   }
 }`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Starting MCP server for Android/iOS Chrome tab transfer...")
+		// Don't print anything to stdout - MCP uses stdio for JSON-RPC communication
+		// Any debug output should go to stderr instead
 		
 		server := mcp.NewTabTransferServer()
 		if err := server.Start(); err != nil {
-			log.Fatal("Failed to start MCP server:", err)
+			// Use stderr for error messages in MCP mode
+			fmt.Fprintf(os.Stderr, "Failed to start MCP server: %v\n", err)
+			os.Exit(1)
 		}
 	},
 }
