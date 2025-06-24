@@ -255,16 +255,10 @@ Useful for debugging cache-related issues and understanding the current state of
 
 // registerResources registers MCP resources
 func (s *TabTransferServer) registerResources() error {
-	// Resource 1: Current tabs in JSON format
-	err := s.server.RegisterResource("tabs://current", "current_tabs", "Currently loaded tabs (JSON format)", "application/json", s.getCurrentTabs)
+	// Resource: Current tabs in YAML format only
+	err := s.server.RegisterResource("tabs://current", "current_tabs", "Currently loaded tabs (YAML format)", "application/x-yaml", s.getCurrentTabsYAML)
 	if err != nil {
 		return fmt.Errorf("failed to register current_tabs resource: %w", err)
-	}
-
-	// Resource 2: Current tabs in YAML format
-	err = s.server.RegisterResource("tabs://current-yaml", "current_tabs_yaml", "Currently loaded tabs (YAML format)", "application/x-yaml", s.getCurrentTabsYAML)
-	if err != nil {
-		return fmt.Errorf("failed to register current_tabs_yaml resource: %w", err)
 	}
 
 	return nil
@@ -630,30 +624,7 @@ func (s *TabTransferServer) cacheStatus(args CacheStatusArgs) (*mcp_golang.ToolR
 	return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(statusText.String())), nil
 }
 
-// getCurrentTabs implements the current tabs resource (JSON format)
-func (s *TabTransferServer) getCurrentTabs() (*mcp_golang.ResourceResponse, error) {
-	// Return cached tabs with thread safety
-	s.cacheMutex.RLock()
-	cachedTabs := make([]loader.Tab, len(s.tabCache))
-	copy(cachedTabs, s.tabCache)
-	s.cacheMutex.RUnlock()
-	
-	formatter := format.DefaultFormatter()
-	tabsData, err := formatter.FormatTabs(cachedTabs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to format cached tabs: %w", err)
-	}
-	
-	resource := mcp_golang.NewTextEmbeddedResource(
-		"tabs://current",
-		tabsData,
-		formatter.GetMimeType(),
-	)
-	
-	return mcp_golang.NewResourceResponse(resource), nil
-}
-
-// getCurrentTabsYAML implements the current tabs resource (YAML format)
+// getCurrentTabsYAML implements the current tabs resource (YAML format only)
 func (s *TabTransferServer) getCurrentTabsYAML() (*mcp_golang.ResourceResponse, error) {
 	// Return cached tabs with thread safety
 	s.cacheMutex.RLock()
@@ -668,7 +639,7 @@ func (s *TabTransferServer) getCurrentTabsYAML() (*mcp_golang.ResourceResponse, 
 	}
 	
 	resource := mcp_golang.NewTextEmbeddedResource(
-		"tabs://current-yaml",
+		"tabs://current",
 		tabsData,
 		formatter.GetMimeType(),
 	)
