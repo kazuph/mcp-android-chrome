@@ -2,6 +2,8 @@
 
 A Model Context Protocol (MCP) server for transferring Chrome tabs between mobile devices and computers using developer tools.
 
+> **⚠️ Important Notice**: This project is primarily tested on Android devices. iOS functionality is implemented but has not been thoroughly tested as the developer primarily uses Android. iOS users may encounter issues and contributions/testing are welcome.
+
 [![Release](https://img.shields.io/github/v/release/kazuph/mcp-android-chrome)](https://github.com/kazuph/mcp-android-chrome/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go](https://img.shields.io/badge/go-%2300ADD8.svg?style=flat&logo=go&logoColor=white)](https://golang.org/)
