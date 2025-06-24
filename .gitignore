@@ -1,26 +1,19 @@
+# IDE files
 /.idea/
 
-/vendor/
+# Build artifacts
+mcp-android-chrome
 
-box.json
-box.phar
-
-tab-transfer.phar
-
-/var/
-/node_modules/
-
-.editorconfig
-
+# Generated files
 tabs.json
 tabs-gist.md
 tabs-reopen.sh
 
-# TODO: Find pattern for \d
+# Pattern for tab files with numbers
 tabs*.json
 tabs*-gist.md
 tabs*-reopen.sh
 wdp_client.html
 
-/tools/*
-!/tools/*.cmd
+# Development files
+.editorconfig
