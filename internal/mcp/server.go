@@ -13,6 +13,7 @@ import (
 	"github.com/metoro-io/mcp-golang/transport/stdio"
 
 	"github.com/kazuph/mcp-android-chrome/internal/driver"
+	"github.com/kazuph/mcp-android-chrome/internal/format"
 	"github.com/kazuph/mcp-android-chrome/internal/loader"
 	"github.com/kazuph/mcp-android-chrome/internal/platform"
 )
@@ -254,10 +255,16 @@ Useful for debugging cache-related issues and understanding the current state of
 
 // registerResources registers MCP resources
 func (s *TabTransferServer) registerResources() error {
-	// Resource 1: Current tabs (if any cached)
-	err := s.server.RegisterResource("tabs://current", "current_tabs", "Currently loaded tabs", "application/json", s.getCurrentTabs)
+	// Resource 1: Current tabs in JSON format
+	err := s.server.RegisterResource("tabs://current", "current_tabs", "Currently loaded tabs (JSON format)", "application/json", s.getCurrentTabs)
 	if err != nil {
 		return fmt.Errorf("failed to register current_tabs resource: %w", err)
+	}
+
+	// Resource 2: Current tabs in YAML format
+	err = s.server.RegisterResource("tabs://current-yaml", "current_tabs_yaml", "Currently loaded tabs (YAML format)", "application/x-yaml", s.getCurrentTabsYAML)
+	if err != nil {
+		return fmt.Errorf("failed to register current_tabs_yaml resource: %w", err)
 	}
 
 	return nil
@@ -271,14 +278,16 @@ type AndroidTabsArgs struct {
 	Wait        int    `json:"wait" jsonschema:"description=Wait time before starting in seconds (default: 2)"`
 	SkipCleanup bool   `json:"skipCleanup" jsonschema:"description=Skip ADB cleanup after operation"`
 	Debug       bool   `json:"debug" jsonschema:"description=Enable debug output"`
+	Format      string `json:"format" jsonschema:"description=Output format: json or yaml (default: json)"`
 }
 
 // IOSTabsArgs represents arguments for iOS tab copying
 type IOSTabsArgs struct {
-	Port    int  `json:"port" jsonschema:"description=Port for iOS WebKit Debug Proxy (default: 9222)"`
-	Timeout int  `json:"timeout" jsonschema:"description=Network timeout in seconds (default: 10)"`
-	Wait    int  `json:"wait" jsonschema:"description=Wait time before starting in seconds (default: 2)"`
-	Debug   bool `json:"debug" jsonschema:"description=Enable debug output"`
+	Port    int    `json:"port" jsonschema:"description=Port for iOS WebKit Debug Proxy (default: 9222)"`
+	Timeout int    `json:"timeout" jsonschema:"description=Network timeout in seconds (default: 10)"`
+	Wait    int    `json:"wait" jsonschema:"description=Wait time before starting in seconds (default: 2)"`
+	Debug   bool   `json:"debug" jsonschema:"description=Enable debug output"`
+	Format  string `json:"format" jsonschema:"description=Output format: json or yaml (default: json)"`
 }
 
 // ReopenTabsArgs represents arguments for tab restoration
@@ -339,13 +348,22 @@ func (s *TabTransferServer) copyTabsAndroid(args AndroidTabsArgs) (*mcp_golang.T
 		return nil, fmt.Errorf("failed to load tabs: %w", err)
 	}
 
-	// Convert to JSON for response
-	tabsJSON, err := json.MarshalIndent(tabs, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal tabs: %w", err)
+	// Determine output format
+	outputFormat := format.FormatJSON
+	if args.Format != "" {
+		if parsedFormat, err := format.ParseFormat(args.Format); err == nil {
+			outputFormat = parsedFormat
+		}
 	}
 
-	result := fmt.Sprintf("Successfully copied %d tabs from Android device:\n\n%s", len(tabs), string(tabsJSON))
+	// Format tabs according to specified format
+	formatter := format.NewTabFormatter(outputFormat)
+	formattedTabs, err := formatter.FormatTabs(tabs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format tabs: %w", err)
+	}
+
+	result := fmt.Sprintf("Successfully copied %d tabs from Android device (format: %s):\n\n%s", len(tabs), outputFormat, formattedTabs)
 	return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(result)), nil
 }
 
@@ -388,13 +406,22 @@ func (s *TabTransferServer) copyTabsIOS(args IOSTabsArgs) (*mcp_golang.ToolRespo
 		return nil, fmt.Errorf("failed to load tabs: %w", err)
 	}
 
-	// Convert to JSON for response
-	tabsJSON, err := json.MarshalIndent(tabs, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal tabs: %w", err)
+	// Determine output format
+	outputFormat := format.FormatJSON
+	if args.Format != "" {
+		if parsedFormat, err := format.ParseFormat(args.Format); err == nil {
+			outputFormat = parsedFormat
+		}
 	}
 
-	result := fmt.Sprintf("Successfully copied %d tabs from iOS device:\n\n%s", len(tabs), string(tabsJSON))
+	// Format tabs according to specified format
+	formatter := format.NewTabFormatter(outputFormat)
+	formattedTabs, err := formatter.FormatTabs(tabs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format tabs: %w", err)
+	}
+
+	result := fmt.Sprintf("Successfully copied %d tabs from iOS device (format: %s):\n\n%s", len(tabs), outputFormat, formattedTabs)
 	return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(result)), nil
 }
 
@@ -603,7 +630,7 @@ func (s *TabTransferServer) cacheStatus(args CacheStatusArgs) (*mcp_golang.ToolR
 	return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(statusText.String())), nil
 }
 
-// getCurrentTabs implements the current tabs resource
+// getCurrentTabs implements the current tabs resource (JSON format)
 func (s *TabTransferServer) getCurrentTabs() (*mcp_golang.ResourceResponse, error) {
 	// Return cached tabs with thread safety
 	s.cacheMutex.RLock()
@@ -611,15 +638,39 @@ func (s *TabTransferServer) getCurrentTabs() (*mcp_golang.ResourceResponse, erro
 	copy(cachedTabs, s.tabCache)
 	s.cacheMutex.RUnlock()
 	
-	tabsJSON, err := json.MarshalIndent(cachedTabs, "", "  ")
+	formatter := format.DefaultFormatter()
+	tabsData, err := formatter.FormatTabs(cachedTabs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal cached tabs: %w", err)
+		return nil, fmt.Errorf("failed to format cached tabs: %w", err)
 	}
 	
 	resource := mcp_golang.NewTextEmbeddedResource(
 		"tabs://current",
-		string(tabsJSON),
-		"application/json",
+		tabsData,
+		formatter.GetMimeType(),
+	)
+	
+	return mcp_golang.NewResourceResponse(resource), nil
+}
+
+// getCurrentTabsYAML implements the current tabs resource (YAML format)
+func (s *TabTransferServer) getCurrentTabsYAML() (*mcp_golang.ResourceResponse, error) {
+	// Return cached tabs with thread safety
+	s.cacheMutex.RLock()
+	cachedTabs := make([]loader.Tab, len(s.tabCache))
+	copy(cachedTabs, s.tabCache)
+	s.cacheMutex.RUnlock()
+	
+	formatter := format.YAMLFormatter()
+	tabsData, err := formatter.FormatTabs(cachedTabs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format cached tabs as YAML: %w", err)
+	}
+	
+	resource := mcp_golang.NewTextEmbeddedResource(
+		"tabs://current-yaml",
+		tabsData,
+		formatter.GetMimeType(),
 	)
 	
 	return mcp_golang.NewResourceResponse(resource), nil

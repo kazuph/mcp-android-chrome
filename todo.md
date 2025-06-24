@@ -16,6 +16,17 @@
   - [ ] **REMAINING**: Test resource reading after cache population in Claude Desktop
   - [ ] **ENHANCEMENT**: Consider adding cache auto-refresh interval
 
+### 📄 YAML Format Support
+- [x] **Add YAML output format option**
+  - [x] Add format parameter to all tab-related tools (copy_tabs_android, copy_tabs_ios)
+  - [x] Support both JSON and YAML output formats via format.Formatter
+  - [x] Default to JSON for backward compatibility
+  - [x] Add YAML formatting for current_tabs resource (tabs://current-yaml)
+  - [x] Created internal/format package with TabFormatter
+  - [x] Support "yaml", "yml", "json" format parameters
+  - [x] **VERIFIED**: YAML output works perfectly via MCP tools
+  - [ ] **ENHANCEMENT**: Update CLI tools to support --format yaml flag
+
 ### 🗑️ Tab Closing Features
 - [ ] **Single tab closing**
   - [ ] Implement `close_tab` MCP tool
