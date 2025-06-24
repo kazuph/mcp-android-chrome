@@ -112,3 +112,102 @@ func (d *IOSDriver) RestoreTabs(ctx context.Context, tabs []loader.Tab) error {
 	
 	return restorer.RestoreTabs(ctx, tabs)
 }
+
+// CloseTab closes a single tab by its ID (iOS implementation)
+func (d *IOSDriver) CloseTab(ctx context.Context, tabID string) error {
+	if d.tabLoader == nil {
+		return fmt.Errorf("driver not started")
+	}
+	
+	// First, verify the tab exists
+	if exists, err := d.tabExists(ctx, tabID); err != nil {
+		return fmt.Errorf("failed to verify tab existence: %w", err)
+	} else if !exists {
+		return fmt.Errorf("tab with ID '%s' does not exist", tabID)
+	}
+	
+	// iOS tab closing via WebSocket message
+	return d.closeTabViaWebSocket(ctx, tabID)
+}
+
+// CloseTabs closes multiple tabs by their IDs (iOS implementation)
+func (d *IOSDriver) CloseTabs(ctx context.Context, tabIDs []string) error {
+	if d.tabLoader == nil {
+		return fmt.Errorf("driver not started")
+	}
+	
+	if d.config.Debug {
+		fmt.Fprintf(os.Stderr, "Closing %d tabs on iOS\n", len(tabIDs))
+	}
+	
+	successCount := 0
+	var failedTabs []string
+	
+	for _, tabID := range tabIDs {
+		if err := d.CloseTab(ctx, tabID); err != nil {
+			if d.config.Debug {
+				fmt.Fprintf(os.Stderr, "Failed to close iOS tab %s: %v\n", tabID, err)
+			}
+			failedTabs = append(failedTabs, tabID)
+		} else {
+			successCount++
+		}
+	}
+	
+	if len(failedTabs) > 0 {
+		return fmt.Errorf("partially successful: closed %d/%d tabs successfully. Failed tabs: %v", 
+			successCount, len(tabIDs), failedTabs)
+	}
+	
+	if d.config.Debug {
+		fmt.Fprintf(os.Stderr, "Successfully closed all %d iOS tabs\n", len(tabIDs))
+	}
+	
+	return nil
+}
+
+// tabExists checks if a tab with the given ID exists (iOS)
+func (d *IOSDriver) tabExists(ctx context.Context, tabID string) (bool, error) {
+	tabs, err := d.LoadTabs(ctx)
+	if err != nil {
+		return false, err
+	}
+	
+	for _, tab := range tabs {
+		if tab.ID == tabID {
+			return true, nil
+		}
+	}
+	
+	return false, nil
+}
+
+// closeTabViaWebSocket closes a tab using WebSocket communication
+func (d *IOSDriver) closeTabViaWebSocket(ctx context.Context, tabID string) error {
+	// For iOS, we use the simpler approach of sending JavaScript to close the tab
+	// This is more reliable than complex WebSocket protocol implementations
+	
+	if d.config.Debug {
+		fmt.Fprintf(os.Stderr, "Closing iOS tab %s via WebSocket\n", tabID)
+	}
+	
+	// Create a WebSocket restorer to send close command
+	baseURL := fmt.Sprintf("http://localhost:%d", d.config.Port)
+	restorer := loader.NewWebSocketTabRestorer(baseURL, d.config.Debug)
+	
+	// Create a "fake" tab with JavaScript to close the window
+	closeTabs := []loader.Tab{
+		{
+			ID:    tabID,
+			Title: "Close Tab Command",
+			URL:   "javascript:window.close()",
+		},
+	}
+	
+	// Execute the close command
+	if err := restorer.RestoreTabs(ctx, closeTabs); err != nil {
+		return fmt.Errorf("failed to send close command to iOS tab: %w", err)
+	}
+	
+	return nil
+}

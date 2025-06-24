@@ -753,38 +753,72 @@ func (s *TabTransferServer) closeTab(args CloseTabArgs) (*mcp_golang.ToolRespons
 		return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(confirmText)), nil
 	}
 	
-	// Only Android is supported for now
-	if platform != "android" {
-		return nil, fmt.Errorf("tab closing is currently only supported for Android platform")
+	// Support both Android and iOS
+	if platform != "android" && platform != "ios" {
+		return nil, fmt.Errorf("tab closing is supported for Android and iOS platforms only")
 	}
 	
-	// Setup Android driver
-	config := driver.AndroidConfig{
-		DriverConfig: driver.DriverConfig{
-			Port:    9222,
-			Timeout: 10 * time.Second,
-			Debug:   true,
-		},
-		Socket: "chrome_devtools_remote",
-		Wait:   2 * time.Second,
-	}
-	
-	androidDriver := driver.NewAndroidDriver(config)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	
-	// Start driver
-	if err := androidDriver.Start(ctx); err != nil {
-		return nil, fmt.Errorf("failed to start Android driver: %w", err)
-	}
-	defer androidDriver.Stop(ctx)
+	var err error
+	var result string
 	
-	// Close the tab
-	if err := androidDriver.CloseTab(ctx, args.TabId); err != nil {
-		return nil, fmt.Errorf("failed to close tab: %w", err)
+	switch platform {
+	case "android":
+		// Setup Android driver
+		config := driver.AndroidConfig{
+			DriverConfig: driver.DriverConfig{
+				Port:    9222,
+				Timeout: 10 * time.Second,
+				Debug:   true,
+			},
+			Socket: "chrome_devtools_remote",
+			Wait:   2 * time.Second,
+		}
+		
+		androidDriver := driver.NewAndroidDriver(config)
+		
+		// Start driver
+		if err = androidDriver.Start(ctx); err != nil {
+			return nil, fmt.Errorf("failed to start Android driver: %w", err)
+		}
+		defer androidDriver.Stop(ctx)
+		
+		// Close the tab
+		if err = androidDriver.CloseTab(ctx, args.TabId); err != nil {
+			return nil, fmt.Errorf("failed to close Android tab: %w", err)
+		}
+		
+		result = fmt.Sprintf("✅ Successfully closed Android tab: %s", args.TabId)
+		
+	case "ios":
+		// Setup iOS driver
+		config := driver.IOSConfig{
+			DriverConfig: driver.DriverConfig{
+				Port:    9222,
+				Timeout: 10 * time.Second,
+				Debug:   true,
+			},
+			Wait: 2 * time.Second,
+		}
+		
+		iosDriver := driver.NewIOSDriver(config)
+		
+		// Start driver
+		if err = iosDriver.Start(ctx); err != nil {
+			return nil, fmt.Errorf("failed to start iOS driver: %w", err)
+		}
+		defer iosDriver.Stop(ctx)
+		
+		// Close the tab
+		if err = iosDriver.CloseTab(ctx, args.TabId); err != nil {
+			return nil, fmt.Errorf("failed to close iOS tab: %w", err)
+		}
+		
+		result = fmt.Sprintf("✅ Successfully closed iOS tab: %s", args.TabId)
 	}
 	
-	result := fmt.Sprintf("✅ Successfully closed tab: %s", args.TabId)
 	return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(result)), nil
 }
 
@@ -796,36 +830,73 @@ func (s *TabTransferServer) closeTabsBulk(args CloseTabsBulkArgs) (*mcp_golang.T
 		platform = "android"
 	}
 	
-	// Only Android is supported for now
-	if platform != "android" {
-		return nil, fmt.Errorf("bulk tab closing is currently only supported for Android platform")
+	// Support both Android and iOS
+	if platform != "android" && platform != "ios" {
+		return nil, fmt.Errorf("bulk tab closing is supported for Android and iOS platforms only")
 	}
 	
-	// Setup Android driver
-	config := driver.AndroidConfig{
-		DriverConfig: driver.DriverConfig{
-			Port:    9222,
-			Timeout: 10 * time.Second,
-			Debug:   args.DryRun, // Enable debug for dry run to see what would happen
-		},
-		Socket: "chrome_devtools_remote",
-		Wait:   2 * time.Second,
-	}
-	
-	androidDriver := driver.NewAndroidDriver(config)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	
-	// Start driver
-	if err := androidDriver.Start(ctx); err != nil {
-		return nil, fmt.Errorf("failed to start Android driver: %w", err)
-	}
-	defer androidDriver.Stop(ctx)
+	var currentTabs []loader.Tab
+	var err error
+	var closeFunc func(context.Context, []string) error
 	
-	// Load current tabs to apply filters
-	currentTabs, err := androidDriver.LoadTabs(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load current tabs: %w", err)
+	switch platform {
+	case "android":
+		// Setup Android driver
+		config := driver.AndroidConfig{
+			DriverConfig: driver.DriverConfig{
+				Port:    9222,
+				Timeout: 10 * time.Second,
+				Debug:   args.DryRun, // Enable debug for dry run to see what would happen
+			},
+			Socket: "chrome_devtools_remote",
+			Wait:   2 * time.Second,
+		}
+		
+		androidDriver := driver.NewAndroidDriver(config)
+		
+		// Start driver
+		if err = androidDriver.Start(ctx); err != nil {
+			return nil, fmt.Errorf("failed to start Android driver: %w", err)
+		}
+		defer androidDriver.Stop(ctx)
+		
+		// Load current tabs to apply filters
+		currentTabs, err = androidDriver.LoadTabs(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load current Android tabs: %w", err)
+		}
+		
+		closeFunc = androidDriver.CloseTabs
+		
+	case "ios":
+		// Setup iOS driver
+		config := driver.IOSConfig{
+			DriverConfig: driver.DriverConfig{
+				Port:    9222,
+				Timeout: 10 * time.Second,
+				Debug:   args.DryRun,
+			},
+			Wait: 2 * time.Second,
+		}
+		
+		iosDriver := driver.NewIOSDriver(config)
+		
+		// Start driver
+		if err = iosDriver.Start(ctx); err != nil {
+			return nil, fmt.Errorf("failed to start iOS driver: %w", err)
+		}
+		defer iosDriver.Stop(ctx)
+		
+		// Load current tabs to apply filters
+		currentTabs, err = iosDriver.LoadTabs(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load current iOS tabs: %w", err)
+		}
+		
+		closeFunc = iosDriver.CloseTabs
 	}
 	
 	// Determine which tabs to close
@@ -889,7 +960,7 @@ func (s *TabTransferServer) closeTabsBulk(args CloseTabsBulkArgs) (*mcp_golang.T
 	}
 	
 	// Actually close the tabs
-	if err := androidDriver.CloseTabs(ctx, tabsToClose); err != nil {
+	if err := closeFunc(ctx, tabsToClose); err != nil {
 		return nil, fmt.Errorf("failed to close tabs: %w", err)
 	}
 	

@@ -119,6 +119,13 @@ func (d *AndroidDriver) CloseTab(ctx context.Context, tabID string) error {
 		return fmt.Errorf("driver not started")
 	}
 	
+	// First, verify the tab exists
+	if exists, err := d.tabExists(ctx, tabID); err != nil {
+		return fmt.Errorf("failed to verify tab existence: %w", err)
+	} else if !exists {
+		return fmt.Errorf("tab with ID '%s' does not exist", tabID)
+	}
+	
 	closeURL := fmt.Sprintf("http://localhost:%d/json/close/%s", d.config.Port, tabID)
 	
 	if d.config.Debug {
@@ -148,7 +155,31 @@ func (d *AndroidDriver) CloseTab(ctx context.Context, tabID string) error {
 	return nil
 }
 
-// CloseTabs closes multiple tabs by their IDs
+// tabExists checks if a tab with the given ID exists
+func (d *AndroidDriver) tabExists(ctx context.Context, tabID string) (bool, error) {
+	tabs, err := d.LoadTabs(ctx)
+	if err != nil {
+		return false, err
+	}
+	
+	for _, tab := range tabs {
+		if tab.ID == tabID {
+			return true, nil
+		}
+	}
+	
+	return false, nil
+}
+
+// TabCloseResult represents the result of closing multiple tabs
+type TabCloseResult struct {
+	SuccessCount int
+	FailedCount  int
+	FailedTabIDs []string
+	FailedErrors map[string]string // tabID -> error message
+}
+
+// CloseTabs closes multiple tabs by their IDs and returns detailed results
 func (d *AndroidDriver) CloseTabs(ctx context.Context, tabIDs []string) error {
 	if d.tabLoader == nil {
 		return fmt.Errorf("driver not started")
@@ -158,18 +189,27 @@ func (d *AndroidDriver) CloseTabs(ctx context.Context, tabIDs []string) error {
 		fmt.Fprintf(os.Stderr, "Closing %d tabs\n", len(tabIDs))
 	}
 	
-	var failedTabs []string
+	result := TabCloseResult{
+		FailedTabIDs: make([]string, 0),
+		FailedErrors: make(map[string]string),
+	}
+	
 	for _, tabID := range tabIDs {
 		if err := d.CloseTab(ctx, tabID); err != nil {
 			if d.config.Debug {
 				fmt.Fprintf(os.Stderr, "Failed to close tab %s: %v\n", tabID, err)
 			}
-			failedTabs = append(failedTabs, tabID)
+			result.FailedCount++
+			result.FailedTabIDs = append(result.FailedTabIDs, tabID)
+			result.FailedErrors[tabID] = err.Error()
+		} else {
+			result.SuccessCount++
 		}
 	}
 	
-	if len(failedTabs) > 0 {
-		return fmt.Errorf("failed to close %d tabs: %v", len(failedTabs), failedTabs)
+	if result.FailedCount > 0 {
+		return fmt.Errorf("partially successful: closed %d/%d tabs successfully. Failed tabs: %v", 
+			result.SuccessCount, len(tabIDs), result.FailedTabIDs)
 	}
 	
 	if d.config.Debug {
