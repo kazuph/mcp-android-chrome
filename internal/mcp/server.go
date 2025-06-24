@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	mcp_golang "github.com/metoro-io/mcp-golang"
@@ -17,15 +19,46 @@ import (
 
 // TabTransferServer implements MCP server for tab transfer functionality
 type TabTransferServer struct {
-	server *mcp_golang.Server
+	server      *mcp_golang.Server
+	tabCache    []loader.Tab
+	cacheMutex  sync.RWMutex
+	cacheSize   int
+	lastUpdated time.Time
 }
 
 // NewTabTransferServer creates a new MCP server for tab transfer
 func NewTabTransferServer() *TabTransferServer {
 	server := mcp_golang.NewServer(stdio.NewStdioServerTransport())
-	return &TabTransferServer{
-		server: server,
+	
+	// Default cache size is 30, can be overridden by environment variable
+	cacheSize := 30
+	if envSize := os.Getenv("TAB_CACHE_SIZE"); envSize != "" {
+		if size := parseInt(envSize); size > 0 {
+			cacheSize = size
+		}
 	}
+	
+	return &TabTransferServer{
+		server:    server,
+		tabCache:  make([]loader.Tab, 0),
+		cacheSize: cacheSize,
+	}
+}
+
+// parseInt safely converts string to int
+func parseInt(s string) int {
+	if s == "" {
+		return 0
+	}
+	result := 0
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			result = result*10 + int(r-'0')
+		} else {
+			return 0
+		}
+	}
+	return result
 }
 
 // Start initializes and starts the MCP server
@@ -40,6 +73,9 @@ func (s *TabTransferServer) Start() error {
 		return fmt.Errorf("failed to register resources: %w", err)
 	}
 
+	// Auto-populate tab cache on startup (non-blocking)
+	go s.populateTabCache()
+
 	// Start the server
 	err := s.server.Serve()
 	if err != nil {
@@ -48,6 +84,66 @@ func (s *TabTransferServer) Start() error {
 
 	// Keep the server running
 	select {}
+}
+
+// populateTabCache attempts to fetch and cache Android tabs on startup
+func (s *TabTransferServer) populateTabCache() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "Tab cache population failed with panic: %v\n", r)
+		}
+	}()
+
+	// Try to populate cache with Android tabs
+	if err := s.fetchAndCacheAndroidTabs(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to populate tab cache: %v\n", err)
+		// Don't fail the server startup if cache population fails
+	} else {
+		fmt.Fprintf(os.Stderr, "Successfully populated tab cache with %d tabs\n", len(s.tabCache))
+	}
+}
+
+// fetchAndCacheAndroidTabs fetches tabs from Android device and updates cache
+func (s *TabTransferServer) fetchAndCacheAndroidTabs() error {
+	config := driver.AndroidConfig{
+		DriverConfig: driver.DriverConfig{
+			Port:    9222,
+			Timeout: 10 * time.Second,
+			Debug:   false, // Don't spam logs during auto-fetch
+		},
+		Socket: "chrome_devtools_remote",
+		Wait:   2 * time.Second,
+	}
+
+	androidDriver := driver.NewAndroidDriver(config)
+	
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Start driver
+	if err := androidDriver.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start Android driver: %w", err)
+	}
+	defer androidDriver.Stop(ctx)
+
+	// Load tabs
+	tabs, err := androidDriver.LoadTabs(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load tabs: %w", err)
+	}
+
+	// Update cache with latest tabs (limit to cacheSize)
+	s.cacheMutex.Lock()
+	defer s.cacheMutex.Unlock()
+	
+	if len(tabs) > s.cacheSize {
+		s.tabCache = tabs[:s.cacheSize]
+	} else {
+		s.tabCache = tabs
+	}
+	s.lastUpdated = time.Now()
+
+	return nil
 }
 
 // registerTools registers all available MCP tools
@@ -127,6 +223,30 @@ This diagnostic tool verifies:
 Use this tool first to diagnose setup issues before attempting tab operations. It provides specific installation commands and troubleshooting steps for each platform.`, s.checkEnvironment)
 	if err != nil {
 		return fmt.Errorf("failed to register check_environment: %w", err)
+	}
+
+	// Tool 5: Refresh tab cache
+	err = s.server.RegisterTool("refresh_tab_cache", `Manually refresh the current tab cache from Android device.
+
+This tool fetches the latest tabs from the connected Android device and updates the internal cache. Useful when you want to ensure the current_tabs resource reflects the most recent browser state.
+
+The cache is automatically populated on server startup, but this tool allows manual updates without restarting the server.`, s.refreshTabCache)
+	if err != nil {
+		return fmt.Errorf("failed to register refresh_tab_cache: %w", err)
+	}
+
+	// Tool 6: Cache status
+	err = s.server.RegisterTool("cache_status", `Check the current status of the tab cache.
+
+This diagnostic tool shows:
+- Number of cached tabs
+- Cache size limit
+- Last update timestamp
+- Cache population status
+
+Useful for debugging cache-related issues and understanding the current state of cached data.`, s.cacheStatus)
+	if err != nil {
+		return fmt.Errorf("failed to register cache_status: %w", err)
 	}
 
 	return nil
@@ -424,12 +544,77 @@ func (s *TabTransferServer) checkEnvironment(args CheckEnvironmentArgs) (*mcp_go
 	return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(resultText)), nil
 }
 
+// RefreshTabCacheArgs represents arguments for cache refresh
+type RefreshTabCacheArgs struct {
+	// No arguments needed for cache refresh
+}
+
+// refreshTabCache implements the tab cache refresh tool
+func (s *TabTransferServer) refreshTabCache(args RefreshTabCacheArgs) (*mcp_golang.ToolResponse, error) {
+	if err := s.fetchAndCacheAndroidTabs(); err != nil {
+		return nil, fmt.Errorf("failed to refresh tab cache: %w", err)
+	}
+	
+	s.cacheMutex.RLock()
+	cacheCount := len(s.tabCache)
+	lastUpdate := s.lastUpdated.Format("2006-01-02 15:04:05")
+	s.cacheMutex.RUnlock()
+	
+	result := fmt.Sprintf("✅ Tab cache refreshed successfully!\n\nCached %d tabs\nLast updated: %s", cacheCount, lastUpdate)
+	return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(result)), nil
+}
+
+// CacheStatusArgs represents arguments for cache status checking
+type CacheStatusArgs struct {
+	// No arguments needed for cache status
+}
+
+// cacheStatus implements the cache status tool
+func (s *TabTransferServer) cacheStatus(args CacheStatusArgs) (*mcp_golang.ToolResponse, error) {
+	s.cacheMutex.RLock()
+	cacheCount := len(s.tabCache)
+	cacheSize := s.cacheSize
+	lastUpdate := s.lastUpdated
+	s.cacheMutex.RUnlock()
+	
+	var statusText strings.Builder
+	statusText.WriteString("📊 Tab Cache Status\n\n")
+	statusText.WriteString(fmt.Sprintf("📱 Cached Tabs: %d\n", cacheCount))
+	statusText.WriteString(fmt.Sprintf("🎯 Cache Limit: %d\n", cacheSize))
+	
+	if lastUpdate.IsZero() {
+		statusText.WriteString("⏰ Last Updated: Never (cache not populated)\n")
+		statusText.WriteString("📊 Status: Empty - use refresh_tab_cache tool to populate\n")
+	} else {
+		statusText.WriteString(fmt.Sprintf("⏰ Last Updated: %s\n", lastUpdate.Format("2006-01-02 15:04:05")))
+		statusText.WriteString(fmt.Sprintf("📊 Status: Active (%d/%d tabs)\n", cacheCount, cacheSize))
+		
+		// Show age of cache
+		age := time.Since(lastUpdate)
+		if age < time.Minute {
+			statusText.WriteString("🟢 Cache Age: Fresh (< 1 minute)\n")
+		} else if age < time.Hour {
+			statusText.WriteString(fmt.Sprintf("🟡 Cache Age: %d minutes\n", int(age.Minutes())))
+		} else {
+			statusText.WriteString(fmt.Sprintf("🔴 Cache Age: %d hours\n", int(age.Hours())))
+		}
+	}
+	
+	return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(statusText.String())), nil
+}
+
 // getCurrentTabs implements the current tabs resource
 func (s *TabTransferServer) getCurrentTabs() (*mcp_golang.ResourceResponse, error) {
-	// This would return cached tabs if any exist
-	// For now, return an empty response
-	emptyTabs := []loader.Tab{}
-	tabsJSON, _ := json.MarshalIndent(emptyTabs, "", "  ")
+	// Return cached tabs with thread safety
+	s.cacheMutex.RLock()
+	cachedTabs := make([]loader.Tab, len(s.tabCache))
+	copy(cachedTabs, s.tabCache)
+	s.cacheMutex.RUnlock()
+	
+	tabsJSON, err := json.MarshalIndent(cachedTabs, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal cached tabs: %w", err)
+	}
 	
 	resource := mcp_golang.NewTextEmbeddedResource(
 		"tabs://current",
